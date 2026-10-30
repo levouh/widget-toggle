@@ -8,6 +8,7 @@ Widget Toggle is a RuneLite external plugin that lets you show or hide common ga
 - Each slot can control one or more elements together
 - Supports Fixed, Resizable Classic, and Resizable Modern layouts
 - Uses RuneLite's normal side-panel and chatbox behavior
+- Optional side-panel links for the minimap and status orbs
 - Optional persistent hiding for individual orbs and utility buttons
 
 ## Hotkey slots
@@ -23,13 +24,21 @@ Each of the four **Hotkey slot** sections contains a hotkey and checkboxes for t
 
 Tick more than one target to treat them as a single layout preset. For example, assign `F6` to a slot with **Side panel**, **Minimap**, and **Status orbs** selected to hide or restore all three together.
 
-Slots start in their visible state. Pressing a configured hotkey hides all of its selected targets; pressing it again restores them. If a normal RuneLite tab hotkey opens a side panel, the linked slot can also be restored automatically through the General option below.
+Hotkeys follow the current interface state. If you manually open or close Chatbox or Side panel, the next relevant hotkey press restores or hides it as expected. If a normal RuneLite tab hotkey opens a side panel, the linked slot can also be restored automatically through the General option below.
 
 ## General settings
 
-### Restore linked elements when a side panel opens
+### Restore links
 
 When enabled, opening a normal side-panel tab—such as Inventory or Prayers—with its RuneLite hotkey restores every element selected alongside **Side panel** in the relevant slot. This keeps a combined side-panel/minimap/orbs preset from getting out of sync.
+
+### Link minimap
+
+When enabled, the minimap hides whenever the side panel closes, including when you click an already-selected tab such as Prayers or Inventory. It returns when a side-panel tab opens, unless an active hotkey keeps the minimap hidden.
+
+### Link orbs
+
+When enabled, the status-orb group follows the side panel in the same way: it hides when the panel closes and returns when a tab opens, unless an active hotkey keeps it hidden.
 
 ## Always hidden settings
 
