@@ -66,8 +66,14 @@ public interface WidgetToggleConfig extends Config
 	@ConfigItem(keyName = "slot4StatusOrbs", name = "Status orbs", description = "Toggle the health, prayer, run, and special-attack orbs with this hotkey.", section = SLOT_4_SECTION, position = 20)
 	default boolean slot4StatusOrbs() { return false; }
 
-	@ConfigItem(keyName = "restoreMinimapOnSidePanelOpen", name = "Restore linked elements when a side panel opens", description = "Restore all elements selected alongside Side panel when you open a side-panel tab, such as inventory or prayers.", section = GENERAL_SECTION, position = 1)
+	@ConfigItem(keyName = "restoreMinimapOnSidePanelOpen", name = "Restore links", description = "When you open a side-panel tab, restore every element selected alongside Side panel in a hotkey slot, such as the minimap or status orbs.", section = GENERAL_SECTION, position = 1)
 	default boolean restoreMinimapOnSidePanelOpen() { return false; }
+
+	@ConfigItem(keyName = "hideMinimapWithSidePanel", name = "Link minimap", description = "Hide the minimap whenever the side panel is closed, including when you close an already-selected tab. The minimap is restored when the side panel opens unless an active hotkey keeps it hidden.", section = GENERAL_SECTION, position = 2)
+	default boolean hideMinimapWithSidePanel() { return false; }
+
+	@ConfigItem(keyName = "hideStatusOrbsWithSidePanel", name = "Link orbs", description = "Hide the status orbs whenever the side panel is closed, including when you close an already-selected tab. The orbs are restored when the side panel opens unless an active hotkey keeps them hidden.", section = GENERAL_SECTION, position = 3)
+	default boolean hideStatusOrbsWithSidePanel() { return false; }
 
 	@ConfigItem(keyName = "hideHealthOrb", name = "Health orb", description = "Always hide the health orb.", section = ALWAYS_HIDDEN_SECTION, position = 1)
 	default boolean hideHealthOrb() { return false; }
