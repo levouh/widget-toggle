@@ -11,8 +11,12 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.ScriptID;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.PostClientTick;
+import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
+import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.gameval.VarbitID;
@@ -55,6 +59,8 @@ public class WidgetTogglePlugin extends Plugin
 	private Boolean originalSidePanelOpen;
 	private int savedChatTab;
 	private Boolean originalChatOpen;
+	private boolean visibilityRefreshPending;
+	private boolean sidePanelWasOpen;
 
 	@Override
 	protected void startUp()
@@ -63,6 +69,7 @@ public class WidgetTogglePlugin extends Plugin
 		registerHotkey(1, config::slot2Hotkey, this::getSlot2Targets);
 		registerHotkey(2, config::slot3Hotkey, this::getSlot3Targets);
 		registerHotkey(3, config::slot4Hotkey, this::getSlot4Targets);
+		sidePanelWasOpen = isSidePanelOpen();
 		applyAlwaysHiddenWidgets();
 		log.debug("Widget Toggle started");
 	}
@@ -108,15 +115,30 @@ public class WidgetTogglePlugin extends Plugin
 	@Subscribe
 	public void onVarClientIntChanged(VarClientIntChanged event)
 	{
-		if (event.getIndex() != VarClientID.TOPLEVEL_PANEL || !config.restoreMinimapOnSidePanelOpen() || !isSidePanelOpen())
+		if (event.getIndex() == VarClientID.CHAT_VIEW)
+		{
+			syncSlotHiddenStates();
+			return;
+		}
+
+		if (event.getIndex() != VarClientID.TOPLEVEL_PANEL)
 		{
 			return;
 		}
 
-		restoreSidePanelSlotTargets(0, getSlot1Targets());
-		restoreSidePanelSlotTargets(1, getSlot2Targets());
-		restoreSidePanelSlotTargets(2, getSlot3Targets());
-		restoreSidePanelSlotTargets(3, getSlot4Targets());
+		boolean sidePanelOpen = isSidePanelOpen();
+		boolean justOpened = !sidePanelWasOpen && sidePanelOpen;
+		sidePanelWasOpen = sidePanelOpen;
+		if (config.restoreMinimapOnSidePanelOpen() && justOpened)
+		{
+			restoreSidePanelSlotTargets(0, getSlot1Targets());
+			restoreSidePanelSlotTargets(1, getSlot2Targets());
+			restoreSidePanelSlotTargets(2, getSlot3Targets());
+			restoreSidePanelSlotTargets(3, getSlot4Targets());
+		}
+
+		syncSlotHiddenStates();
+		queueVisibilityRefresh();
 	}
 
 	@Subscribe
@@ -124,7 +146,7 @@ public class WidgetTogglePlugin extends Plugin
 	{
 		if (event.getGameState() == GameState.LOGGED_IN)
 		{
-			clientThread.invokeLater(this::applyAlwaysHiddenWidgets);
+			queueVisibilityRefresh();
 		}
 	}
 
@@ -133,8 +155,39 @@ public class WidgetTogglePlugin extends Plugin
 	{
 		if ("widget-toggle".equals(event.getGroup()))
 		{
-			clientThread.invokeLater(this::applyAlwaysHiddenWidgets);
+			queueVisibilityRefresh();
 		}
+	}
+
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event)
+	{
+		if (isTrackedWidgetGroup(event.getGroupId()))
+		{
+			queueVisibilityRefresh();
+		}
+	}
+
+	@Subscribe
+	public void onScriptPostFired(ScriptPostFired event)
+	{
+		int scriptId = event.getScriptId();
+		if (scriptId == ScriptID.TOPLEVEL_REDRAW || scriptId == ScriptID.TOPLEVEL_RESIZE_CUSTOMISE)
+		{
+			queueVisibilityRefresh();
+		}
+	}
+
+	@Subscribe
+	public void onPostClientTick(PostClientTick event)
+	{
+		if (!visibilityRefreshPending)
+		{
+			return;
+		}
+
+		visibilityRefreshPending = false;
+		reapplyHiddenWidgetTargets();
 	}
 
 	private void registerHotkey(int slot, Supplier<Keybind> keybindSupplier, Supplier<List<WidgetToggleTarget>> targetsSupplier)
@@ -145,7 +198,7 @@ public class WidgetTogglePlugin extends Plugin
 			public void hotkeyPressed()
 			{
 				List<WidgetToggleTarget> targets = targetsSupplier.get();
-				boolean hideTargets = !slotHidden[slot];
+				boolean hideTargets = shouldHideTargets(targets);
 				slotHidden[slot] = hideTargets;
 				if (targets.contains(WidgetToggleTarget.SIDE_PANEL))
 				{
@@ -179,6 +232,117 @@ public class WidgetTogglePlugin extends Plugin
 			}
 		}
 		applyAlwaysHiddenWidgets();
+		queueVisibilityRefresh();
+	}
+
+	private void queueVisibilityRefresh()
+	{
+		visibilityRefreshPending = true;
+	}
+
+	private void reapplyHiddenWidgetTargets()
+	{
+		for (int slot = 0; slot < slotHidden.length; slot++)
+		{
+			if (!slotHidden[slot])
+			{
+				continue;
+			}
+
+			for (WidgetToggleTarget target : getSlotTargets(slot))
+			{
+				if (target == WidgetToggleTarget.MINIMAP || target == WidgetToggleTarget.STATUS_ORBS)
+				{
+					setWidgetHidden(target, true);
+				}
+			}
+		}
+		applyAlwaysHiddenWidgets();
+	}
+
+	private void syncSlotHiddenStates()
+	{
+		for (int slot = 0; slot < slotHidden.length; slot++)
+		{
+			slotHidden[slot] = areTargetsHidden(getSlotTargets(slot));
+		}
+	}
+
+	private boolean areTargetsHidden(List<WidgetToggleTarget> targets)
+	{
+		if (targets.isEmpty())
+		{
+			return false;
+		}
+
+		for (WidgetToggleTarget target : targets)
+		{
+			if (!isTargetHidden(target))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean shouldHideTargets(List<WidgetToggleTarget> targets)
+	{
+		if (targets.contains(WidgetToggleTarget.SIDE_PANEL))
+		{
+			return isSidePanelOpen();
+		}
+		if (targets.contains(WidgetToggleTarget.CHATBOX))
+		{
+			return isChatOpen();
+		}
+		return !areTargetsHidden(targets);
+	}
+
+	private boolean isTargetHidden(WidgetToggleTarget target)
+	{
+		if (target == WidgetToggleTarget.CHATBOX)
+		{
+			return !isChatOpen();
+		}
+		if (target == WidgetToggleTarget.SIDE_PANEL)
+		{
+			return !isSidePanelOpen();
+		}
+
+		for (int widgetId : getWidgetIds(target))
+		{
+			Widget widget = client.getWidget(widgetId);
+			if (widget == null || !widget.isSelfHidden())
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private List<WidgetToggleTarget> getSlotTargets(int slot)
+	{
+		switch (slot)
+		{
+			case 0:
+				return getSlot1Targets();
+			case 1:
+				return getSlot2Targets();
+			case 2:
+				return getSlot3Targets();
+			case 3:
+				return getSlot4Targets();
+			default:
+				throw new IllegalArgumentException("Unknown hotkey slot: " + slot);
+		}
+	}
+
+	private boolean isTrackedWidgetGroup(int groupId)
+	{
+		return groupId == InterfaceID.Orbs.UNIVERSE >>> 16
+			|| groupId == InterfaceID.Toplevel.MAPCONTAINER >>> 16
+			|| groupId == InterfaceID.ToplevelOsrsStretch.MAP_MINIMAP >>> 16
+			|| groupId == InterfaceID.ToplevelPreEoc.MAP_MINIMAP >>> 16;
 	}
 
 	private void applyAlwaysHiddenWidgets()
@@ -413,7 +577,7 @@ public class WidgetTogglePlugin extends Plugin
 		}
 
 		int targetChatTab = currentChatTab == 1337 ? savedChatTab : currentChatTab;
-		clientThread.invokeLater(() -> client.runScript(175, 1, targetChatTab));
+		client.runScript(175, 1, targetChatTab);
 	}
 
 	private void toggleSidePanel()
