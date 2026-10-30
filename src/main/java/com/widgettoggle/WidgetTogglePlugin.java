@@ -61,6 +61,8 @@ public class WidgetTogglePlugin extends Plugin
 	private Boolean originalChatOpen;
 	private boolean visibilityRefreshPending;
 	private boolean sidePanelWasOpen;
+	private boolean minimapHiddenForSidePanel;
+	private boolean statusOrbsHiddenForSidePanel;
 
 	@Override
 	protected void startUp()
@@ -109,6 +111,8 @@ public class WidgetTogglePlugin extends Plugin
 		{
 			slotHidden[slot] = false;
 		}
+		minimapHiddenForSidePanel = false;
+		statusOrbsHiddenForSidePanel = false;
 		log.debug("Widget Toggle stopped");
 	}
 
@@ -137,6 +141,8 @@ public class WidgetTogglePlugin extends Plugin
 			restoreSidePanelSlotTargets(3, getSlot4Targets());
 		}
 
+		applySidePanelMinimapLink(sidePanelOpen);
+		applySidePanelStatusOrbsLink(sidePanelOpen);
 		syncSlotHiddenStates();
 		queueVisibilityRefresh();
 	}
@@ -242,6 +248,9 @@ public class WidgetTogglePlugin extends Plugin
 
 	private void reapplyHiddenWidgetTargets()
 	{
+		applySidePanelMinimapLink(isSidePanelOpen());
+		applySidePanelStatusOrbsLink(isSidePanelOpen());
+
 		for (int slot = 0; slot < slotHidden.length; slot++)
 		{
 			if (!slotHidden[slot])
@@ -258,6 +267,62 @@ public class WidgetTogglePlugin extends Plugin
 			}
 		}
 		applyAlwaysHiddenWidgets();
+	}
+
+	private void applySidePanelMinimapLink(boolean sidePanelOpen)
+	{
+		if (config.hideMinimapWithSidePanel() && !sidePanelOpen)
+		{
+			setWidgetHidden(WidgetToggleTarget.MINIMAP, true);
+			minimapHiddenForSidePanel = true;
+			return;
+		}
+
+		if (minimapHiddenForSidePanel && !isMinimapHiddenByHotkey())
+		{
+			setWidgetHidden(WidgetToggleTarget.MINIMAP, false);
+		}
+		minimapHiddenForSidePanel = false;
+	}
+
+	private boolean isMinimapHiddenByHotkey()
+	{
+		for (int slot = 0; slot < slotHidden.length; slot++)
+		{
+			if (slotHidden[slot] && getSlotTargets(slot).contains(WidgetToggleTarget.MINIMAP))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void applySidePanelStatusOrbsLink(boolean sidePanelOpen)
+	{
+		if (config.hideStatusOrbsWithSidePanel() && !sidePanelOpen)
+		{
+			setWidgetHidden(WidgetToggleTarget.STATUS_ORBS, true);
+			statusOrbsHiddenForSidePanel = true;
+			return;
+		}
+
+		if (statusOrbsHiddenForSidePanel && !areStatusOrbsHiddenByHotkey())
+		{
+			setWidgetHidden(WidgetToggleTarget.STATUS_ORBS, false);
+		}
+		statusOrbsHiddenForSidePanel = false;
+	}
+
+	private boolean areStatusOrbsHiddenByHotkey()
+	{
+		for (int slot = 0; slot < slotHidden.length; slot++)
+		{
+			if (slotHidden[slot] && getSlotTargets(slot).contains(WidgetToggleTarget.STATUS_ORBS))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private void syncSlotHiddenStates()
